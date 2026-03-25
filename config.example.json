@@ -1,0 +1,8 @@
+{
+  "hnlat_username": "",
+  "hnlat_password": "",
+  "qq_email": "",
+  "qq_imap_auth": "",
+  "download_dir": "./downloads",
+  "loop_interval_seconds": 300
+}
