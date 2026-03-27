@@ -3,3 +3,14 @@ flask>=2.0.0
 playwright>=1.40.0
 PyMuPDF>=1.23.0
 python-telegram-bot>=20.0
+Pillow>=10.0.0
+
+# OCR 支持（选择安装其中一个即可）
+# 推荐: EasyOCR（支持中英文，安装简单）
+# pip install easyocr
+#
+# 高精度选项: PaddleOCR（需要 paddlepaddle）
+# pip install paddleocr paddlepaddle
+#
+# 备选（需本地安装 Tesseract 可执行文件）:
+# pip install pytesseract
