@@ -1,195 +1,145 @@
-# HNLAT 自动文献下载器 Skill
+---
+name: hnlat-auto-paper-helper
+description: Automatically submit papers to paper.hnlat.com or spis.hnlat.com by DOI/title, monitor QQ mailbox for PDF attachments, and download papers. Supports dual-platform selection (paper互助 / spis机构全文库) with auto-fallback. Use this skill when users need to submit academic papers, track download status, or batch process literature from HNLAT platform.
+allowed-tools: 
+disable: false
+---
 
-## 描述
+# HNLAT 自动文献助手 v2.1
 
-自动化从 [paper.hnlat.com](https://paper.hnlat.com) 下载学术文献的工具。支持通过 DOI、论文标题、微信公众号文章自动提交文献求助，自动监控邮箱获取下载链接，并通过 Playwright 浏览器自动化完成 PDF 下载。
-
-**关键词**: 文献下载, 论文下载, HNLAT, 学术资源, 自动化, DOI, 公众号解析, Playwright
-
-## 功能特性
-
-- 🔐 自动登录 paper.hnlat.com（SSO 统一认证）
-- 📝 通过 DOI 或论文标题提交文献求助
-- 📧 自动监控 QQ 邮箱获取下载链接
-- 🌐 **Playwright 浏览器自动化下载**（解决 JavaScript 渲染页面）
-- 📂 **自动分类整理文献**（按主题/关键词）
-- 🔗 从微信公众号文章自动解析 DOI/标题
-- 🌐 Web API 服务支持
-- 🤖 Telegram Bot 集成
-
-## 使用场景
-
-- 下载学术论文或文献
-- 通过 DOI 查找论文
-- 从公众号文章中提取论文信息并下载
-- 批量下载多篇论文并自动分类
-
-## 快速开始
-
-### 1. 安装依赖
-
-```bash
-pip install requests flask playwright PyMuPDF
-playwright install chromium
-```
-
-### 2. 配置账号
-
-编辑 `config.json`：
-
-```json
-{
-  "hnlat_username": "你的HNLAT账号",
-  "hnlat_password": "你的HNLAT密码",
-  "qq_email": "你的QQ邮箱",
-  "qq_imap_auth": "QQ邮箱授权码（16位）",
-  "download_dir": "./downloads",
-  "loop_interval_seconds": 300
-}
-```
-
-### 3. 基本用法
-
-#### 提交文献下载
-
-```bash
-# 通过 DOI
-python hnlat_auto.py --doi 10.1038/s41586-024-08329-5
-
-# 通过标题
-python hnlat_auto.py --title "Deep learning for image recognition"
-
-# 持续监控模式
-python hnlat_auto.py --doi 10.xxx --loop
-```
-
-#### 解析公众号文章
-
-```bash
-python wechat_parser.py "https://mp.weixin.qq.com/s/xxxxx"
-```
-
-#### 检查邮箱并下载
-
-```bash
-python hnlat_auto.py --monitor
-```
-
-### 4. API 服务
-
-```bash
-python api_server.py
-```
-
-API 端点：
-- `POST /submit` - 提交 DOI/标题
-- `POST /parse_wechat` - 解析公众号文章
-- `GET /check_mail` - 检查邮箱状态
-- `GET /download` - 下载 PDF
-
-## 核心流程
-
-### 完整下载流程
-
-```
-1. 用户提交 DOI/标题/公众号链接
-       ↓
-2. hnlat_auto.py 登录 HNLAT 平台提交求助
-       ↓
-3. 平台处理（社区互助，几分钟到几小时）
-       ↓
-4. PDF 下载链接发送到 QQ 邮箱
-       ↓
-5. check_and_download.py 监控邮箱提取下载链接
-       ↓
-6. download_v3.py 使用 Playwright 打开链接并下载 PDF
-       ↓
-7. reorganize_all.py 自动分类整理文献
-```
-
-### 文件说明
-
-| 文件 | 功能 |
-|------|------|
-| `hnlat_auto.py` | 核心脚本：登录、提交、监控邮箱 |
-| `api_server.py` | Web API 服务 |
-| `wechat_parser.py` | 公众号文章解析器 |
-| `telegram_bot.py` | Telegram 机器人 |
-| `check_and_download.py` | 检查邮箱并提取新下载链接 |
-| `download_v3.py` | Playwright 浏览器自动化下载 |
-| `reorganize_all.py` | 文献自动分类整理 |
-| `extract_abstracts.py` | 提取 PDF 摘要（辅助分类） |
-
-## 文献分类规则
-
-默认分类主题：
-
-1. **肠道菌群与代谢** - 短链脂肪酸、微生物代谢
-2. **肠-肝轴与肠道干细胞** - 肠道器官轴
-3. **肠-皮轴与皮肤健康** - 肠-皮双向通信
-4. **衰老与抗衰老机制** - 热量限制、衰老研究
-5. **肿瘤免疫** - 癌症免疫学
-6. **微生物群落生态** - 微生物群落结构
-7. **人工智能与微生物组** - ML 应用
-8. **大型队列与精准医学** - 队列研究
-9. **G蛋白偶联受体** - GPCR 研究
-
-可在 `reorganize_all.py` 中自定义分类规则。
-
-## 依赖
-
-- Python 3.8+
-- requests >= 2.28.0
-- flask >= 2.0.0
-- playwright >= 1.40.0
-- PyMuPDF >= 1.23.0
-
-## 部署
-
-### 本地部署
-
-```bash
-cd hnlat-auto-paper-helper
-pip install -r requirements.txt
-playwright install chromium
-cp config.example.json config.json
-# 编辑 config.json
-python api_server.py
-```
-
-### Docker 部署
-
-```bash
-docker build -t hnlat-downloader .
-docker run -d -p 5000:5000 \
-  -v $(pwd)/config.json:/app/config.json \
-  -v $(pwd)/downloads:/app/downloads \
-  hnlat-downloader
-```
-
-## 安全提示
-
-1. **不要提交 config.json**
-2. **使用 QQ 邮箱授权码**（不是登录密码）
-3. **定期更换密码**
-
-## 更新日志
-
-### 2026-03-26
-
-**新增功能：**
-- ✨ Playwright 浏览器自动化下载（解决 JS 渲染页面问题）
-- ✨ 文献自动分类整理功能
-- ✨ PDF 摘要提取辅助分类
-- ✨ 邮箱下载链接提取脚本
-
-**优化改进：**
-- 🔧 修复邮箱附件检测（PDF 在邮件正文中而非附件）
-- 🔧 Windows UTF-8 编码兼容
-- 🔧 下载去重和文件名规范化
+脚本目录：`C:\Users\xf280\.workbuddy\skills\hnlat-auto-paper-helper\scripts\`  
+配置文件：`scripts\config.json`（账号：280230439，QQ邮箱：2794204788@qq.com）
 
 ---
 
-**部署位置**: `E:\qclaw\resources\openclaw\config\skills\hnlat-auto-paper-helper`
+## 平台说明
 
-**最后更新**: 2026-03-27
+| 平台 | 用途 | 网络要求 |
+|------|------|---------|
+| paper.hnlat.com | 文献互助，PDF 发到 QQ 邮箱 | 任意网络 |
+| spis.hnlat.com | 机构全文库，可直接下载 | 校园网（非校园网自动转互助） |
+
+默认使用 `auto` 模式：优先 spis，失败自动降级 paper。
+
+---
+
+## 常用命令速查
+
+### 提交文献
+
+```bash
+# 单篇（auto 模式）
+python hnlat_auto.py --doi 10.1038/s41586-024-08329-5
+python hnlat_auto.py --title "paper title here"
+
+# 指定平台
+python hnlat_auto.py --doi 10.xxx --site paper
+python hnlat_auto.py --doi 10.xxx --site spis
+
+# 批量（每行一个 DOI）
+python hnlat_auto.py --doi-list dois.txt
+```
+
+### 下载 PDF（QQ 邮箱）
+
+```bash
+# 扫描邮箱并下载所有新 PDF（下载成功的邮件自动标已读，MD5 去重）
+python hnlat_auto.py --download
+
+# 检查邮件状态（不下载）
+python hnlat_auto.py --monitor
+
+# 提交后持续监控邮箱（每 5 分钟检查一次）
+python hnlat_auto.py --doi 10.xxx --loop
+```
+
+### spis 投递记录
+
+```bash
+# 查看投递历史及下载链接（status=9 为已完成）
+python hnlat_auto.py --spis-deliveries
+```
+
+### 公众号文章解析
+
+```bash
+# 解析文章，自动 OCR 图片中的标题/DOI
+python wechat_parser.py "https://mp.weixin.qq.com/s/xxxxx"
+
+# 解析并直接提交到 HNLAT
+python wechat_parser.py "https://mp.weixin.qq.com/s/xxxxx" --submit
+
+# 跳过 OCR（更快）
+python wechat_parser.py "URL" --no-ocr
+```
+
+---
+
+## 完整工作流程
+
+**标准流程（单篇）：**
+1. `python hnlat_auto.py --doi 10.xxx` — 提交
+2. 等待邮件（通常 5–30 分钟）
+3. `python hnlat_auto.py --download` — 下载 PDF，已处理邮件自动标已读
+
+**公众号文章批量下载流程：**
+1. `python wechat_parser.py "URL" --submit` — 解析文章并提交所有文献
+2. 等待邮件
+3. `python hnlat_auto.py --download` — 批量下载
+
+**spis 直接下载流程（校园网）：**
+1. `python hnlat_auto.py --doi 10.xxx --site spis`
+2. `python hnlat_auto.py --spis-deliveries` — 查看 downloadUrl
+3. 直接访问 downloadUrl 下载
+
+---
+
+## 下载机制说明
+
+`--download` 命令的去重逻辑（按优先级）：
+1. **MD5 内容去重**：计算 PDF 字节 MD5，与本地所有 PDF 比对，相同内容无论文件名如何都跳过
+2. **文件名去重**：同名文件直接跳过
+3. **已读标记**：有 PDF 成功下载的邮件自动标记为「已读」（IMAP `\Seen`）
+4. 运行结束打印汇总：`新增 X | 跳过已存在 X | 跳过内容重复 X`
+
+---
+
+## OCR 引擎（wechat_parser）
+
+按优先级自动选择，安装其一即可：
+
+```bash
+pip install easyocr              # 推荐：中英文，安装简单
+pip install paddleocr paddlepaddle  # 高精度备选
+```
+
+未安装时跳过 OCR，不影响文字提取。OCR 来源的结果标注 `[图片OCR]`。
+
+---
+
+## 关键技术参数
+
+- SSO: `https://sso.hnlat.com`（paper/spis 共用）
+- spis SSO service URL 用 `http://`（非 https）
+- spis API: `https://spis.hnlat.com/api`
+- `helpChannel=5` → paper 渠道；`helpChannel=2` → spis 渠道
+- spis `status=10011` = 非校园网 IP（正常，转互助渠道）
+- IMAP: `imap.qq.com:993`（SSL）
+
+---
+
+## 脚本目录
+
+| 文件 | 用途 |
+|------|------|
+| `hnlat_auto.py` | 核心脚本（提交、下载、监控） |
+| `wechat_parser.py` | 公众号文章解析 + 图片 OCR |
+| `api_server.py` | Flask HTTP API 服务 |
+| `telegram_bot.py` | Telegram Bot 远程控制 |
+| `auto_download_flow.py` | 全流程自动下载 |
+| `monitor_loop.py` | 独立持续监控 |
+| `reorganize_all.py` | PDF 按主题自动分类 |
+| `extract_abstracts.py` | PDF 摘要提取 |
+| `download_v3.py` | Playwright 浏览器下载（处理 JS 页面） |
+| `config.json` | 账号配置（不上传 git） |
+| `config.example.json` | 配置模板 |
