@@ -1,10 +1,10 @@
 # HNLAT 自动文献下载器
 
-一个自动化工具，用于从 [paper.hnlat.com](https://paper.hnlat.com) 下载学术文献。
+一个自动化工具，用于从 [paper.hnlat.com](https://paper.hnlat.com)（或通过 [spis.hnlat.com](https://spis.hnlat.com) SSO 登录）下载学术文献。
 
 ## 功能特性
 
-- 自动登录 paper.hnlat.com
+- 自动登录 paper.hnlat.com（支持通过 spis.hnlat.com SSO 认证）
 - 通过 DOI 或论文标题提交文献求助
 - 自动监控 QQ 邮箱，下载 PDF 附件
 - 支持批量提交和持续监控模式

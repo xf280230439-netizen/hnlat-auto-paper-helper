@@ -50,7 +50,7 @@ requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
 SSO_BASE = "https://sso.hnlat.com"
 PAPER_BASE = "https://paper.hnlat.com"
 SERVICE_URL = (
-    "https://paper.hnlat.com/loginCenter"
+    "https://spis.hnlat.com/loginCenter"
     "?sourceurl=https%3A%2F%2Fpaper.hnlat.com%2F"
 )
 IMAP_SERVER = "imap.qq.com"
