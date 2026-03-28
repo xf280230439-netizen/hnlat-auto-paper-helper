@@ -297,82 +297,135 @@ def extract_wechat_article_content(url):
 
 # ─────────────────────────── 文本提取 ───────────────────────────
 
+def _clean_doi(raw: str) -> str:
+    """
+    清洗 DOI 字符串：
+    - 去掉 doi.org/ 前缀
+    - 截断 HTML 实体（&、\\x3c、%3C 等）和常见尾缀
+    - OCR 常见误识纠正：541574 → s41574，S1471 → s1471 等
+    """
+    doi = raw.strip()
+
+    # 去掉 doi.org 前缀
+    for prefix in ('https://doi.org/', 'http://doi.org/',
+                   'https://dx.doi.org/', 'http://dx.doi.org/'):
+        if doi.lower().startswith(prefix):
+            doi = doi[len(prefix):]
+            break
+    doi = re.sub(r'^[Dd][Oo][Ii][:\s]*', '', doi)
+
+    # 在第一个 HTML/转义特征前截断
+    doi = re.split(r'[&\\%]', doi)[0]          # & \ % 开头的实体
+    doi = re.split(r'\x3c|\x3e', doi)[0]        # 转义 < >
+    doi = re.split(r'\\x[0-9a-fA-F]{2}', doi)[0]
+
+    # 截断常见末尾杂质
+    doi = doi.strip('.,;:"\' \t\r\n')
+    doi = re.sub(r'[<>"\'].*$', '', doi)
+
+    # OCR 常见误识：起始数字 5 误识为 s（如 541574 → s41574）
+    doi = re.sub(r'^(10\.\d{4,}/)[5](\d)', lambda m: m.group(1) + 's' + m.group(2), doi)
+
+    return doi
+
+
 def extract_dois(text):
-    """从文本中提取 DOI"""
-    doi_patterns = [
-        r'10\.\d{4,}\/[^\s"<>]+',
-        r'DOI[:\s]*10\.\d{4,}\/[^\s"<>]+',
-        r'doi[:\s]*10\.\d{4,}\/[^\s"<>]+',
-        r'https?://doi\.org/10\.\d{4,}\/[^\s"<>]+',
-        r'https?://dx\.doi\.org/10\.\d{4,}\/[^\s"<>]+',
-    ]
+    """从文本中提取 DOI，返回去重后的干净 DOI 列表"""
+    # 匹配原始 DOI 片段（宽松匹配，后续清洗）
+    doi_raw_pattern = re.compile(
+        r'(?:https?://(?:dx\.)?doi\.org/|DOI[:\s]*|doi[:\s]*)?'
+        r'10\.\d{4,}/[^\s"\'<>&\\]{3,}',
+        re.IGNORECASE
+    )
     dois = []
-    for pattern in doi_patterns:
-        matches = re.findall(pattern, text, re.IGNORECASE)
-        for match in matches:
-            doi = match
-            if 'doi.org/' in match.lower():
-                doi = match.split('doi.org/')[-1]
-            elif 'dx.doi.org/' in match.lower():
-                doi = match.split('dx.doi.org/')[-1]
-            else:
-                doi = re.sub(r'^[Dd][Oo][Ii][:\s]*', '', match)
-            doi = doi.strip('.,;:"\'')
-            if doi.startswith('10.') and doi not in dois:
-                dois.append(doi)
-    return dois
+    seen = set()
+    for m in doi_raw_pattern.finditer(text):
+        doi = _clean_doi(m.group(0))
+        if doi.startswith('10.') and len(doi) > 8 and doi not in seen:
+            seen.add(doi)
+            dois.append(doi)
+    # 去除子集 DOI（如 10.1038/s41574-026-01236 被 10.1038/s41574-026-01236-x 包含）
+    dois.sort(key=len, reverse=True)
+    deduped_dois = []
+    for d in dois:
+        if not any(d in longer for longer in deduped_dois):
+            deduped_dois.append(d)
+    return deduped_dois
+
+
+_CODE_NOISE = re.compile(
+    r'[{}()\[\];]|window\.|function\s|console\.|\.emit\(|\.log\(|break;|return\s|'
+    r'\$\.|props:|created:|synthetic_|__proto__|prototype|addEventListener|'
+    r'threshold:|required:|Array|Boolean|Object|undefined|null\b|true\b|false\b',
+    re.IGNORECASE
+)
+
+def _is_junk_title(t: str) -> bool:
+    """判断候选标题是否为代码/JS 噪音"""
+    if _CODE_NOISE.search(t):
+        return True
+    # 含过多非字母字符（代码行）
+    non_alpha = sum(1 for c in t if not c.isalpha() and not c.isspace())
+    if non_alpha / max(len(t), 1) > 0.35:
+        return True
+    # 换行超过 2 行的多半是代码片段
+    if t.count('\n') > 2:
+        return True
+    return False
 
 
 def extract_paper_titles(text):
-    """从文本中提取可能的论文标题"""
+    """从文本中提取可能的论文标题（已过滤 JS/代码噪音）"""
     titles = []
-    clean_text = re.sub(r'<[^>]+>', ' ', text)
-    clean_text = unescape(clean_text)
+    seen: set[str] = set()
 
-    # 模式1: 引号中的长文本
-    quote_patterns = [
-        r'"([^"]{30,200})"',
-        r'"([^"]{30,200})"',
-        r'《([^》]{10,100})》',
-    ]
-    for pattern in quote_patterns:
-        matches = re.findall(pattern, clean_text)
-        for match in matches:
-            match = match.strip()
-            if 20 < len(match) < 200 and not any(
-                x in match.lower() for x in ['http', 'www', '.com', 'click', '订阅']
-            ):
-                if match not in titles:
-                    titles.append(match)
+    # 只对可见文本操作，去掉 script/style 块和 HTML 标签
+    clean = re.sub(r'<script[^>]*>.*?</script>', ' ', text, flags=re.DOTALL | re.IGNORECASE)
+    clean = re.sub(r'<style[^>]*>.*?</style>', ' ', clean, flags=re.DOTALL | re.IGNORECASE)
+    clean = re.sub(r'<[^>]+>', ' ', clean)
+    clean = unescape(clean)
 
-    # 模式2: 以特定关键词开头的句子
-    title_indicators = [
+    def _add(t: str) -> None:
+        t = t.strip()
+        if 20 < len(t) < 300 and t not in seen and not _is_junk_title(t):
+            seen.add(t)
+            titles.append(t)
+
+    # 模式1: 引号包裹的长文本
+    for pat in [r'"([^"]{30,200})"', r'\u201c([^\u201d]{30,200})\u201d',
+                r'\u300a([^\u300b]{10,100})\u300b']:
+        for m in re.findall(pat, clean):
+            if not any(x in m.lower() for x in ['http', 'www', '.com', 'click', '订阅']):
+                _add(m)
+
+    # 模式2: 标题指示词
+    for pat in [
         r'(?:标题|题目|Title)[:：]\s*([^\n。]{20,150})',
-        r'(?:研究|论文|文章)[:：]\s*["「『《]?([^\n"」』》]{20,150})',
+        r'(?:研究|论文|文章)[:：]\s*[\u201c\u300a「『《]?([^\n\u201d\u300b」』》]{20,150})',
         r'(?:published|titled|entitled)[:\s]+["\']?([^"\']{20,150})',
-    ]
-    for pattern in title_indicators:
-        matches = re.findall(pattern, clean_text, re.IGNORECASE)
-        for match in matches:
-            match = match.strip()
-            if 20 < len(match) < 200 and match not in titles:
-                titles.append(match)
+    ]:
+        for m in re.findall(pat, clean, re.IGNORECASE):
+            _add(m)
 
-    # 模式3: 学术标题结构（英文）
-    academic_pattern = r'([A-Z][^。！？\n]{30,150}(?:in|of|for|on|and|the)[^。！？\n]{10,100})'
-    matches = re.findall(academic_pattern, clean_text)
-    for match in matches:
-        match = match.strip()
-        if 30 < len(match) < 200 and match not in titles:
-            academic_keywords = [
-                'study', 'analysis', 'effect', 'impact', 'association',
-                'risk', 'patients', 'treatment', 'clinical', 'research'
-            ]
-            if any(kw in match.lower() for kw in academic_keywords):
-                titles.append(match)
+    # 模式3: 英文学术标题结构（首字母大写，含学术关键词，无代码特征）
+    acad_kws = {'study', 'analysis', 'effect', 'impact', 'association',
+                'risk', 'patients', 'treatment', 'clinical', 'research',
+                'microbiome', 'aging', 'disease', 'cancer', 'gut', 'immune'}
+    for m in re.findall(r'([A-Z][^\n。！？]{30,180}(?:in|of|for|on|and|the)[^\n。！？]{5,80})', clean):
+        m = m.strip()
+        if any(kw in m.lower() for kw in acad_kws):
+            _add(m)
 
-    titles.sort(key=lambda x: abs(len(x) - 80))
-    return titles[:5]
+    # 去除互相包含的冗余项（保留更长的那条）
+    titles.sort(key=len, reverse=True)
+    deduped = []
+    for t in titles:
+        if not any(t in longer for longer in deduped):
+            deduped.append(t)
+
+    # 按长度接近 80 字符排序（学术标题典型长度），取前 5
+    deduped.sort(key=lambda x: abs(len(x) - 80))
+    return deduped[:5]
 
 
 def extract_journal_info(text):
