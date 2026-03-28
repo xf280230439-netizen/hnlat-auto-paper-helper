@@ -543,6 +543,29 @@ def display_results(result):
 
 # ─────────────────────────── HNLAT 提交 ───────────────────────────
 
+def _dedupe_submit_dois(result: dict) -> list:
+    """
+    从解析结果中筛选出真正需要提交的 DOI 列表：
+    1. 优先使用文本提取的 DOI（非 OCR 来源）
+    2. OCR 来源的 DOI 只在无文本 DOI 时作为备选
+    3. 再次做子串去重（防止 OCR 短 DOI 与文本长 DOI 同时出现）
+    """
+    text_dois = [d for d in result.get('dois', [])
+                 if d not in result.get('ocr_dois', [])]
+    ocr_dois  = result.get('ocr_dois', [])
+
+    # 优先用文本提取的 DOI；若无则用 OCR 的
+    candidates = text_dois if text_dois else ocr_dois
+
+    # 子串去重（短 DOI 若被长 DOI 包含则丢弃）
+    candidates.sort(key=len, reverse=True)
+    final = []
+    for d in candidates:
+        if not any(d in longer for longer in final):
+            final.append(d)
+    return final
+
+
 def submit_to_hnlat(identifier, is_doi=True):
     """调用 hnlat_auto.py 提交文献"""
     import subprocess
@@ -591,11 +614,14 @@ def main():
 
     # 自动提交
     if args.submit and result:
-        if result['dois']:
-            for doi in result['dois']:
+        dois_to_submit = _dedupe_submit_dois(result)
+        if dois_to_submit:
+            for doi in dois_to_submit:
                 submit_to_hnlat(doi, is_doi=True)
         elif result['titles']:
-            submit_to_hnlat(result['titles'][0], is_doi=False)
+            # 只取第一条（最完整的）标题，去掉多行换行后的杂项
+            best_title = result['titles'][0].split('\n')[0].strip()
+            submit_to_hnlat(best_title, is_doi=False)
         else:
             print("\n未能提取到DOI或标题，无法提交")
     elif result and (result['dois'] or result['titles']):
